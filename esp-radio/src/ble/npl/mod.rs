@@ -1404,13 +1404,19 @@ unsafe extern "C" fn ble_hs_hci_rx_evt(cmd: *const u8, arg: *const c_void) -> i3
 unsafe extern "C" fn ble_hs_rx_data(om: *const OsMbuf, arg: *const c_void) -> i32 {
     trace!("ble_hs_rx_data {:?} {:?}", om, arg);
 
-    let data_ptr = unsafe { (*om).om_data };
-    let len = unsafe { (*om).om_len };
-    let data_slice = unsafe { core::slice::from_raw_parts(data_ptr, len as usize) };
-
-    let mut data = Vec::with_capacity(data_slice.len() + 1);
+    // The controller can hand over one ACL packet as a chain of mbufs; copy
+    // every segment, not just the first one, or the packet reaches the host
+    // shorter than its own ACL header says.
+    let mut data = Vec::new();
     data.push(0x02); // ACL
-    data.extend_from_slice(data_slice);
+    let mut m = om;
+    while !m.is_null() {
+        let data_ptr = unsafe { (*m).om_data };
+        let len = unsafe { (*m).om_len };
+        let data_slice = unsafe { core::slice::from_raw_parts(data_ptr, len as usize) };
+        data.extend_from_slice(data_slice);
+        m = unsafe { (*m).next };
+    }
 
     super::dump_packet_info(&data);
 
