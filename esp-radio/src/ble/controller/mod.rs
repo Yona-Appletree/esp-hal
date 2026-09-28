@@ -301,7 +301,21 @@ fn parse_hci(data: &[u8]) -> Result<ControllerToHostPacket<'_>, BleConnectorErro
     match ControllerToHostPacket::from_hci_bytes_complete(data) {
         Ok(p) => Ok(p),
         Err(e) => {
-            warn!("[hci] error parsing packet: {:?}", e);
+            // Also print the packet's length and first bytes (its H4
+            // indicator and header), which are what tell a short packet
+            // from a garbled one; `{:?}` alone can print nothing in a build
+            // with `-Zfmt-debug=none`.
+            let head = |i: usize| data.get(i).copied().unwrap_or(0);
+            warn!(
+                "[hci] error parsing packet: {:?} ({} B: {:02x} {:02x} {:02x} {:02x} {:02x})",
+                e,
+                data.len(),
+                head(0),
+                head(1),
+                head(2),
+                head(3),
+                head(4)
+            );
             Err(BleConnectorError::Unknown)
         }
     }
